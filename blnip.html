@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Modulated Neural Grid Simulation</title>
+<title>"Beyond-local neural information processing", algorithm with modulation</title>
 <style>
   :root {
     /* pixel size of one lattice site when rendered */
-    --cell: 15px;
+    --cell: 20px;
   }
 
   body {
@@ -18,7 +18,7 @@
     padding: 1rem;
   }
 
-  #controls {
+  #controls, #params {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
@@ -36,6 +36,7 @@
 
   <canvas id="network"></canvas>
 
+  <!-- main controls row -->
   <div id="controls">
     <button id="step">Step</button>
     <button id="run">Run</button>
@@ -45,7 +46,7 @@
     </label>
 
     <label>grid
-      <input type="number" id="size" min="10" max="150" value="70" />
+      <input type="number" id="size" min="10" max="150" value="40" />
     </label>
 
     <label>init
@@ -74,14 +75,24 @@
     <button id="reset">Reset</button>
   </div>
 
+  <!-- parameter controls row -->
+  <div id="params">
+    <label>g
+      <input type="number" id="g" min="0" step="0.01" value="0.08" />
+    </label>
+    <label>f
+      <input type="number" id="f" min="0" step="0.01" value="0.25" />
+    </label>
+    <label>c²
+      <input type="number" id="c2" min="0" step="0.01" value="0.15" />
+    </label>
+  </div>
+
 <script>
 (() => {
   // ---------- configuration ---------- //
-  let DEFAULT_LATTICE_SIZE = 70;
+  const DEFAULT_LATTICE_SIZE = 40;
   let size = DEFAULT_LATTICE_SIZE;
-  const g  = 0.08;               // damping‑like modulation
-  const f  = 0.25;               // modulation on Δ ("fatigue")
-  const c2 = 0.15;               // coupling strength c²
 
   // Per‑node state arrays (flat index = y * size + x)
   let A = [],    // activation(t )
@@ -97,8 +108,13 @@
   const canvas = document.getElementById('network');
   const ctx     = canvas.getContext('2d');
 
+  // parameter inputs
+  const gInput  = document.getElementById('g');
+  const fInput  = document.getElementById('f');
+  const c2Input = document.getElementById('c2');
+
   // ---------- helpers ---------- //
-  function index(x, y) { return y * size + x; }
+  const index = (x, y) => y * size + x;
 
   // 4‑connected neighbourhood without wrapping
   function neighbours4(x, y) {
@@ -113,24 +129,18 @@
   // --- initialization strategies --- //
   function buildInitialA(strategy) {
     const arr = new Array(size * size).fill(0);
-    if (strategy === 'random') {
-      for (let i = 0; i < arr.length; i++) arr[i] = Math.random() * 2 - 1;
-    } else if (strategy === 'center') {
-      placeSource('center', arr);
-    } else if (strategy === 'top-left') {
-      placeSource('tl', arr);
-    } else if (strategy === 'top-right') {
-      placeSource('tr', arr);
-    } else if (strategy === 'bot-left') {
-      placeSource('bl', arr);
-    } else if (strategy === 'bot-right') {
-      placeSource('br', arr);
-    } else if (strategy === 'five-points') {
-      placeSource('center', arr);
-      placeSource('tl', arr);
-      placeSource('tr', arr);
-      placeSource('bl', arr);
-      placeSource('br', arr);
+    switch (strategy) {
+      case 'random':
+        for (let i = 0; i < arr.length; i++) arr[i] = Math.random() * 2 - 1;
+        break;
+      case 'center':       placeSource('center', arr); break;
+      case 'top-left':     placeSource('tl', arr);     break;
+      case 'top-right':    placeSource('tr', arr);     break;
+      case 'bot-left':     placeSource('bl', arr);     break;
+      case 'bot-right':    placeSource('br', arr);     break;
+      case 'five-points':
+        ['center','tl','tr','bl','br'].forEach(k=>placeSource(k,arr));
+        break;
     }
     return arr;
   }
@@ -164,27 +174,31 @@
   }
 
   function step() {
+    // pull live parameters
+    const g  = parseFloat(gInput.value);
+    const f  = parseFloat(fInput.value);
+    const c2 = parseFloat(c2Input.value);
+
     // swap buffers
-    [A, Aprev]   = [Aprev, A];
-    [Δ, Δprev]   = [Δprev, Δ];
+    [A, Aprev] = [Aprev, A];
+    [Δ, Δprev] = [Δprev, Δ];
 
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const i   = index(x, y);
         const nbr = neighbours4(x, y);
+        const nL  = nbr.length;
 
-        // 1. Δ′(t)
+        // 1. Δ′(t) ("grid Laplacian"), avg (i -> j activation delta)
         let sumDiff = 0;
         for (const j of nbr) sumDiff += (Aprev[j] - Aprev[i]);
-        const Δprime = sumDiff / nbr.length;
+        const Δprime = sumDiff / nL;
 
         // 2. Δ(t)
-        Δ[i] = Δprev[i] + c2 * Δprime;
+        Δ[i] = (Δprev[i] + c2 * Δprime) / (1 + f);
 
         // 3‑5. A(t)
-        const inner = Δprev[i] + (c2 / nbr.length) * sumDiff;
-        const mod   = inner / (1 + f);
-        A[i] = (Aprev[i] + mod) / (1 + g);
+        A[i] = (Aprev[i] + Δ[i]) / (1 + g);
       }
     }
     draw();
@@ -208,18 +222,17 @@
     ctx.drawImage(canvas, 0, 0, size, size, 0, 0, size * px, size * px);
   }
 
-  // ---------- UI ---------- //
-  document.getElementById('step').onclick    = step;
-  document.getElementById('run').onclick     = () => {
+  // ---------- UI bindings ---------- //
+  document.getElementById('step').onclick  = step;
+  document.getElementById('run').onclick   = () => {
     running = !running;
     document.getElementById('run').textContent = running ? 'Pause' : 'Run';
   };
-  document.getElementById('reset').onclick   = initGrid;
-  document.getElementById('speed').oninput   = e => {
+  document.getElementById('reset').onclick = initGrid;
+  document.getElementById('speed').oninput = e => {
     frameInterval = 1000 / (+e.target.value || 20);
   };
 
-  // trigger point source interactively
   document.getElementById('trigger').onclick = () => {
     placeSource(document.getElementById('source').value);
     draw();
