@@ -6,7 +6,7 @@
 <style>
   :root {
     /* pixel size of one lattice site when rendered */
-    --cell: 7px;
+    --cell: 15px;
   }
 
   body {
@@ -45,15 +45,31 @@
     </label>
 
     <label>grid
-      <input type="number" id="size" min="10" max="150" value="100" />
+      <input type="number" id="size" min="10" max="150" value="70" />
     </label>
 
     <label>init
       <select id="init">
         <option value="random">Random</option>
         <option value="center">Center spike</option>
+        <option value="top-left">Top left spike</option>
+        <option value="top-right">Top right spike</option>
+        <option value="bot-left">Bottom left spike</option>
+        <option value="bot-right">Bottom right spike</option>
+        <option value="five-points">Five points</option>
       </select>
     </label>
+
+    <label>source
+      <select id="source">
+        <option value="center">Center</option>
+        <option value="tl">Top‑left</option>
+        <option value="tr">Top‑right</option>
+        <option value="bl">Bottom‑left</option>
+        <option value="br">Bottom‑right</option>
+      </select>
+    </label>
+    <button id="trigger">Add&nbsp;source</button>
 
     <button id="reset">Reset</button>
   </div>
@@ -61,7 +77,8 @@
 <script>
 (() => {
   // ---------- configuration ---------- //
-  let size = 60;                 // lattice width & height (editable)
+  let DEFAULT_LATTICE_SIZE = 70;
+  let size = DEFAULT_LATTICE_SIZE;
   const g  = 0.08;               // damping‑like modulation
   const f  = 0.25;               // modulation on Δ ("fatigue")
   const c2 = 0.15;               // coupling strength c²
@@ -99,15 +116,41 @@
     if (strategy === 'random') {
       for (let i = 0; i < arr.length; i++) arr[i] = Math.random() * 2 - 1;
     } else if (strategy === 'center') {
-      const cx = Math.floor(size / 2),
-            cy = Math.floor(size / 2);
-      arr[index(cx, cy)] = 1; // maximal activation at centre
+      placeSource('center', arr);
+    } else if (strategy === 'top-left') {
+      placeSource('tl', arr);
+    } else if (strategy === 'top-right') {
+      placeSource('tr', arr);
+    } else if (strategy === 'bot-left') {
+      placeSource('bl', arr);
+    } else if (strategy === 'bot-right') {
+      placeSource('br', arr);
+    } else if (strategy === 'five-points') {
+      placeSource('center', arr);
+      placeSource('tl', arr);
+      placeSource('tr', arr);
+      placeSource('bl', arr);
+      placeSource('br', arr);
     }
     return arr;
   }
 
+  // place a point‑source (activation = 1) into grid or supplied array
+  function placeSource(kind, targetArr = A) {
+    let x, y;
+    switch (kind) {
+      case 'center': x = Math.floor(size / 2); y = Math.floor(size / 2); break;
+      case 'tl':     x = 0;             y = 0;              break;
+      case 'tr':     x = size - 1;      y = 0;              break;
+      case 'bl':     x = 0;             y = size - 1;       break;
+      case 'br':     x = size - 1;      y = size - 1;       break;
+      default: return;
+    }
+    targetArr[index(x, y)] = 1;
+  }
+
   function initGrid() {
-    size = parseInt(document.getElementById('size').value) || 60;
+    size = parseInt(document.getElementById('size').value) || DEFAULT_LATTICE_SIZE;
     const strategy = document.getElementById('init').value;
 
     A      = buildInitialA(strategy);
@@ -166,14 +209,20 @@
   }
 
   // ---------- UI ---------- //
-  document.getElementById('step').onclick = step;
-  document.getElementById('run').onclick  = () => {
+  document.getElementById('step').onclick    = step;
+  document.getElementById('run').onclick     = () => {
     running = !running;
     document.getElementById('run').textContent = running ? 'Pause' : 'Run';
   };
-  document.getElementById('reset').onclick = initGrid;
-  document.getElementById('speed').oninput = e => {
+  document.getElementById('reset').onclick   = initGrid;
+  document.getElementById('speed').oninput   = e => {
     frameInterval = 1000 / (+e.target.value || 20);
+  };
+
+  // trigger point source interactively
+  document.getElementById('trigger').onclick = () => {
+    placeSource(document.getElementById('source').value);
+    draw();
   };
 
   function loop(ts) {
