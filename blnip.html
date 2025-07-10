@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Modulated Neural Grid Simulation</title>
+<style>
+  :root {
+    /* pixel size of one lattice site when rendered */
+    --cell: 18px;
+  }
+
+  body {
+    font-family: system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  #controls {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  #network {
+    image-rendering: pixelated; /* crisp upscale */
+    border: 1px solid #ccc;
+  }
+</style>
+</head>
+<body>
+  <h2>Modulated Neural Grid Simulation</h2>
+
+  <canvas id="network"></canvas>
+
+  <div id="controls">
+    <button id="step">Step</button>
+    <button id="run">Run</button>
+
+    <label>speed
+      <input type="range" id="speed" min="1" max="60" value="20" />
+    </label>
+
+    <label>grid
+      <input type="number" id="size" min="10" max="120" value="60" />
+    </label>
+
+    <label>init
+      <select id="init">
+        <option value="random">Random</option>
+        <option value="center">Center spike</option>
+      </select>
+    </label>
+
+    <button id="reset">Reset</button>
+  </div>
+
+<script>
+(() => {
+  // ---------- configuration ---------- //
+  let size = 60;                 // lattice width & height (editable)
+  const g  = 0.08;               // damping‑like modulation
+  const f  = 0.25;               // modulation on Δ ("fatigue")
+  const c2 = 0.15;               // coupling strength c²
+
+  // Per‑node state arrays (flat index = y * size + x)
+  let A = [],    // activation(t )
+      Aprev = [],// activation(t‑1)
+      Δ = [],    // Δ(t )
+      Δprev = []; // Δ(t‑1)
+
+  // Timing
+  let running       = false,
+      frameInterval = 1000 / 20, // ms – updated from slider
+      lastTime      = 0;
+
+  const canvas = document.getElementById('network');
+  const ctx     = canvas.getContext('2d');
+
+  // ---------- helpers ---------- //
+  function index(x, y) { return y * size + x; }
+
+  // 4‑connected neighbourhood without wrapping
+  function neighbours4(x, y) {
+    const out = [];
+    if (y > 0)           out.push(index(x, y - 1));
+    if (y < size - 1)    out.push(index(x, y + 1));
+    if (x > 0)           out.push(index(x - 1, y));
+    if (x < size - 1)    out.push(index(x + 1, y));
+    return out;
+  }
+
+  // --- initialization strategies --- //
+  function buildInitialA(strategy) {
+    const arr = new Array(size * size).fill(0);
+    if (strategy === 'random') {
+      for (let i = 0; i < arr.length; i++) arr[i] = Math.random() * 2 - 1;
+    } else if (strategy === 'center') {
+      const cx = Math.floor(size / 2),
+            cy = Math.floor(size / 2);
+      arr[index(cx, cy)] = 1; // maximal activation at centre
+    }
+    return arr;
+  }
+
+  function initGrid() {
+    size = parseInt(document.getElementById('size').value) || 60;
+    const strategy = document.getElementById('init').value;
+
+    A      = buildInitialA(strategy);
+    Δ      = new Array(size * size).fill(0);
+    Aprev  = A.slice();
+    Δprev  = Δ.slice();
+
+    const px = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell'));
+    canvas.width = canvas.height = size * px;
+    draw();
+  }
+
+  function step() {
+    // swap buffers
+    [A, Aprev]   = [Aprev, A];
+    [Δ, Δprev]   = [Δprev, Δ];
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i   = index(x, y);
+        const nbr = neighbours4(x, y);
+
+        // 1. Δ′(t)
+        let sumDiff = 0;
+        for (const j of nbr) sumDiff += (Aprev[j] - Aprev[i]);
+        const Δprime = sumDiff / nbr.length;
+
+        // 2. Δ(t)
+        Δ[i] = Δprev[i] + c2 * Δprime;
+
+        // 3‑5. A(t)
+        const inner = Δprev[i] + (c2 / nbr.length) * sumDiff;
+        const mod   = inner / (1 + f);
+        A[i] = (Aprev[i] + mod) / (1 + g);
+      }
+    }
+    draw();
+  }
+
+  function draw() {
+    const px = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell'));
+    const img = ctx.createImageData(size, size);
+
+    for (let i = 0; i < A.length; i++) {
+      const v     = Math.max(-1, Math.min(1, A[i]));
+      const shade = ((v + 1) / 2) * 255;
+      img.data[i * 4 + 0] = shade;
+      img.data[i * 4 + 1] = shade;
+      img.data[i * 4 + 2] = shade;
+      img.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(canvas, 0, 0, size, size, 0, 0, size * px, size * px);
+  }
+
+  // ---------- UI ---------- //
+  document.getElementById('step').onclick = step;
+  document.getElementById('run').onclick  = () => {
+    running = !running;
+    document.getElementById('run').textContent = running ? 'Pause' : 'Run';
+  };
+  document.getElementById('reset').onclick = initGrid;
+  document.getElementById('speed').oninput = e => {
+    frameInterval = 1000 / (+e.target.value || 20);
+  };
+
+  function loop(ts) {
+    if (running && ts - lastTime >= frameInterval) {
+      step();
+      lastTime = ts;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // boot
+  initGrid();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
