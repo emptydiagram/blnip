@@ -63,7 +63,8 @@
     <label>init
       <select id="init">
         <option value="random">Random</option>
-        <option value="center">Center spike</option>
+        <option value="+center">(+) Center spike</option>
+        <option value="-center">(-) Center spike</option>
         <option value="top-left">Top left spike</option>
         <option value="top-right">Top right spike</option>
         <option value="bot-left">Bottom left spike</option>
@@ -74,14 +75,15 @@
 
     <label>source
       <select id="source">
-        <option value="center">Center</option>
-        <option value="tl">Top‑left</option>
-        <option value="tr">Top‑right</option>
-        <option value="bl">Bottom‑left</option>
-        <option value="br">Bottom‑right</option>
+        <option value="+center">(+) Center spike</option>
+        <option value="-center">(-) Center spike</option>
+        <option value="top-left">Top left spike</option>
+        <option value="top-right">Top right spike</option>
+        <option value="bot-left">Bottom left spike</option>
+        <option value="bot-right">Bottom right spike</option>
       </select>
     </label>
-    <button id="trigger">Add&nbsp;source</button>
+    <button id="trigger">Trigger source</button>
 
     <button id="reset">Reset</button>
   </div>
@@ -150,7 +152,8 @@
       case 'random':
         for (let i = 0; i < arr.length; i++) arr[i] = Math.random() * 2 - 1;
         break;
-      case 'center':       placeSource('center', 1, arr); break;
+      case '+center':      placeSource('center', 1, arr); break;
+      case '-center':      placeSource('center', -1, arr); break;
       case 'top-left':     placeSource('tl', 1, arr);     break;
       case 'top-right':    placeSource('tr', 1, arr);     break;
       case 'bot-left':     placeSource('bl', 1, arr);     break;
@@ -227,7 +230,16 @@
   };
 
   document.getElementById('trigger').onclick = () => {
-    placeSource(document.getElementById('source').value, 1);
+    let sourceVal = document.getElementById('source').value;
+    switch (sourceVal) {
+      case '+center':      placeSource('center', 1); break;
+      case '-center':      placeSource('center', -1); break;
+      case 'top-left':     placeSource('tl', 1);     break;
+      case 'top-right':    placeSource('tr', 1);     break;
+      case 'bot-left':     placeSource('bl', 1);     break;
+      case 'bot-right':    placeSource('br', 1);     break;
+      case 'five-points':  ['center','tl','tr','bl','br'].forEach(k=>placeSource(k,1)); break;
+    }
     draw();
   };
 
