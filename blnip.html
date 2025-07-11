@@ -34,8 +34,6 @@
 <body>
   <h2>Modulated Neural Grid Simulation</h2>
 
-  <canvas id="network"></canvas>
-
   <!-- main controls row -->
   <div id="controls">
     <button id="step">Step</button>
@@ -83,8 +81,10 @@
   <div id="params">
     <label>g <input type="number" id="g" min="0" step="0.01" value="0.05" /></label>
     <label>f <input type="number" id="f" min="0" step="0.001" value="0.005" /></label>
-    <label>c² <input type="number" id="c2" min="0" step="0.01" value="0.5" /></label>
+    <label>c² <input type="number" id="c2" min="0" step="0.01" value="0.1" /></label>
   </div>
+
+  <canvas id="network"></canvas>
 
 <script>
 (() => {
@@ -175,7 +175,7 @@
         // 1. Δ′(t) ("grid Laplacian"), avg (i -> j activation delta)
         let sumDiff = 0;
         for (const j of nbr) sumDiff += (Aprev[j] - Aprev[i]);
-        const Δprime = sum / k;
+        const Δprime = sumDiff / k;
 
         // 2. Δ(t)
         Δ[i] = (Δprev[i] + c2 * Δprime) / (1 + f);
