@@ -42,7 +42,7 @@
     <button id="run">Run</button>
 
     <label>speed
-      <input type="range" id="speed" min="1" max="60" value="20" />
+      <input type="range" id="speed" min="1" max="50" value="5" />
     </label>
 
     <label>grid
@@ -92,6 +92,7 @@
 (() => {
   // ---------- configuration ---------- //
   const DEFAULT_LATTICE_SIZE = 40;
+  const DEFAULT_SPEED = 5;
   let size = DEFAULT_LATTICE_SIZE;
 
   // Per‑node state arrays (flat index = y * size + x)
@@ -102,7 +103,7 @@
 
   // Timing
   let running       = false,
-      frameInterval = 1000 / 20, // ms – updated from slider
+      frameInterval = 1000 / DEFAULT_SPEED, // ms – updated from slider
       lastTime      = 0;
 
   const canvas = document.getElementById('network');
