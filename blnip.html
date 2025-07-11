@@ -49,6 +49,10 @@
       <input type="number" id="size" min="10" max="150" value="40" />
     </label>
 
+    <label>cell px
+      <input type="range" id="cell" min="4" max="30" value="20" />
+    </label>
+
     <label>init
       <select id="init">
         <option value="random">Random</option>
@@ -77,57 +81,66 @@
 
   <!-- parameter controls row -->
   <div id="params">
-    <label>g
-      <input type="number" id="g" min="0" step="0.01" value="0.05" />
-    </label>
-    <label>f
-      <input type="number" id="f" min="0" step="0.01" value="0.005" />
-    </label>
-    <label>c²
-      <input type="number" id="c2" min="0" step="0.01" value="0.5" />
-    </label>
+    <label>g <input type="number" id="g" min="0" step="0.01" value="0.05" /></label>
+    <label>f <input type="number" id="f" min="0" step="0.001" value="0.005" /></label>
+    <label>c² <input type="number" id="c2" min="0" step="0.01" value="0.5" /></label>
   </div>
 
 <script>
 (() => {
   // ---------- configuration ---------- //
   const DEFAULT_LATTICE_SIZE = 40;
-  const DEFAULT_SPEED = 5;
+  const DEFAULT_SPEED        = 5;
+  const DEFAULT_CELL_PX      = 20;
+
   let size = DEFAULT_LATTICE_SIZE;
 
-  // Per‑node state arrays (flat index = y * size + x)
-  let A = [],    // activation(t )
-      Aprev = [],// activation(t‑1)
-      Δ = [],    // Δ(t )
-      Δprev = []; // Δ(t‑1)
+  // Per‑node state buffers (flat index = y * size + x)
+  let A = [], Aprev = [], Δ = [], Δprev = [];
 
   // Timing
-  let running       = false,
-      frameInterval = 1000 / DEFAULT_SPEED, // ms – updated from slider
+  let running = false,
+      frameInterval = 1000 / DEFAULT_SPEED,
       lastTime      = 0;
 
   const canvas = document.getElementById('network');
-  const ctx     = canvas.getContext('2d');
+  const ctx    = canvas.getContext('2d');
 
-  // parameter inputs
-  const gInput  = document.getElementById('g');
-  const fInput  = document.getElementById('f');
-  const c2Input = document.getElementById('c2');
+  // DOM refs
+  const speedInput = document.getElementById('speed');
+  const sizeInput  = document.getElementById('size');
+  const cellInput  = document.getElementById('cell');
+  const gInput     = document.getElementById('g');
+  const fInput     = document.getElementById('f');
+  const c2Input    = document.getElementById('c2');
 
   // ---------- helpers ---------- //
   const index = (x, y) => y * size + x;
 
-  // 4‑connected neighbourhood without wrapping
-  function neighbours4(x, y) {
+  // 4‑connected neighbours w/o wrapping
+  const neighbours4 = (x, y) => {
     const out = [];
-    if (y > 0)           out.push(index(x, y - 1));
-    if (y < size - 1)    out.push(index(x, y + 1));
-    if (x > 0)           out.push(index(x - 1, y));
-    if (x < size - 1)    out.push(index(x + 1, y));
+    if (y > 0)        out.push(index(x, y - 1));
+    if (y < size - 1) out.push(index(x, y + 1));
+    if (x > 0)        out.push(index(x - 1, y));
+    if (x < size - 1) out.push(index(x + 1, y));
     return out;
+  };
+
+  // -------- initialisation -------- //
+  function placeSource(kind, arr = A) {
+    let x, y;
+    switch (kind) {
+      case 'center': x = Math.floor(size / 2); y = Math.floor(size / 2); break;
+      case 'tl':     x = 0;           y = 0;            break;
+      case 'tr':     x = size - 1;    y = 0;            break;
+      case 'bl':     x = 0;           y = size - 1;     break;
+      case 'br':     x = size - 1;    y = size - 1;     break;
+      default: return;
+    }
+    arr[index(x, y)] = 1;
   }
 
-  // --- initialization strategies --- //
   function buildInitialA(strategy) {
     const arr = new Array(size * size).fill(0);
     switch (strategy) {
@@ -139,46 +152,15 @@
       case 'top-right':    placeSource('tr', arr);     break;
       case 'bot-left':     placeSource('bl', arr);     break;
       case 'bot-right':    placeSource('br', arr);     break;
-      case 'five-points':
-        ['center','tl','tr','bl','br'].forEach(k=>placeSource(k,arr));
-        break;
+      case 'five-points':  ['center','tl','tr','bl','br'].forEach(k=>placeSource(k,arr)); break;
     }
     return arr;
   }
 
-  // place a point‑source (activation = 1) into grid or supplied array
-  function placeSource(kind, targetArr = A) {
-    let x, y;
-    switch (kind) {
-      case 'center': x = Math.floor(size / 2); y = Math.floor(size / 2); break;
-      case 'tl':     x = 0;             y = 0;              break;
-      case 'tr':     x = size - 1;      y = 0;              break;
-      case 'bl':     x = 0;             y = size - 1;       break;
-      case 'br':     x = size - 1;      y = size - 1;       break;
-      default: return;
-    }
-    targetArr[index(x, y)] = 1;
-  }
-
-  function initGrid() {
-    size = parseInt(document.getElementById('size').value) || DEFAULT_LATTICE_SIZE;
-    const strategy = document.getElementById('init').value;
-
-    A      = buildInitialA(strategy);
-    Δ      = new Array(size * size).fill(0);
-    Aprev  = A.slice();
-    Δprev  = Δ.slice();
-
-    const px = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell'));
-    canvas.width = canvas.height = size * px;
-    draw();
-  }
-
   function step() {
-    // pull live parameters
-    const g  = parseFloat(gInput.value);
-    const f  = parseFloat(fInput.value);
-    const c2 = parseFloat(c2Input.value);
+    const g  = +gInput.value;
+    const f  = +fInput.value;
+    const c2 = +c2Input.value;
 
     // swap buffers
     [A, Aprev] = [Aprev, A];
@@ -188,12 +170,12 @@
       for (let x = 0; x < size; x++) {
         const i   = index(x, y);
         const nbr = neighbours4(x, y);
-        const nL  = nbr.length;
+        const k   = nbr.length;
 
         // 1. Δ′(t) ("grid Laplacian"), avg (i -> j activation delta)
         let sumDiff = 0;
         for (const j of nbr) sumDiff += (Aprev[j] - Aprev[i]);
-        const Δprime = sumDiff / nL;
+        const Δprime = sum / k;
 
         // 2. Δ(t)
         Δ[i] = (Δprev[i] + c2 * Δprime) / (1 + f);
@@ -210,12 +192,11 @@
     const img = ctx.createImageData(size, size);
 
     for (let i = 0; i < A.length; i++) {
-      const v     = Math.max(-1, Math.min(1, A[i]));
-      const shade = ((v + 1) / 2) * 255;
-      img.data[i * 4 + 0] = shade;
-      img.data[i * 4 + 1] = shade;
-      img.data[i * 4 + 2] = shade;
-      img.data[i * 4 + 3] = 255;
+      const v = Math.max(-1, Math.min(1, A[i]));
+      const s = ((v + 1) / 2) * 255;
+      const k = i * 4;
+      img.data[k] = img.data[k+1] = img.data[k+2] = s;
+      img.data[k+3] = 255;
     }
 
     ctx.putImageData(img, 0, 0);
@@ -223,21 +204,46 @@
     ctx.drawImage(canvas, 0, 0, size, size, 0, 0, size * px, size * px);
   }
 
-  // ---------- UI bindings ---------- //
   document.getElementById('step').onclick  = step;
   document.getElementById('run').onclick   = () => {
     running = !running;
     document.getElementById('run').textContent = running ? 'Pause' : 'Run';
   };
   document.getElementById('reset').onclick = initGrid;
-  document.getElementById('speed').oninput = e => {
-    frameInterval = 1000 / (+e.target.value || 20);
+
+  speedInput.oninput = e => {
+    frameInterval = 1000 / (+e.target.value || DEFAULT_SPEED);
+  };
+
+  cellInput.oninput = e => {
+    const px = +e.target.value || DEFAULT_CELL_PX;
+    document.documentElement.style.setProperty('--cell', `${px}px`);
+    // resize canvas to new pixel size and redraw current state
+    canvas.width = canvas.height = size * px;
+    draw();
   };
 
   document.getElementById('trigger').onclick = () => {
     placeSource(document.getElementById('source').value);
     draw();
   };
+
+  // -------- init -------- //
+  function initGrid() {
+    size = +sizeInput.value || DEFAULT_LATTICE_SIZE;
+    const strategy = document.getElementById('init').value;
+
+    A     = buildInitialA(strategy);
+    Δ     = new Array(size * size).fill(0);
+    Aprev = A.slice();
+    Δprev = Δ.slice();
+
+    // respect current cell px
+    const px = +cellInput.value || DEFAULT_CELL_PX;
+    document.documentElement.style.setProperty('--cell', `${px}px`);
+    canvas.width = canvas.height = size * px;
+    draw();
+  }
 
   function loop(ts) {
     if (running && ts - lastTime >= frameInterval) {
@@ -247,7 +253,6 @@
     requestAnimationFrame(loop);
   }
 
-  // boot
   initGrid();
   requestAnimationFrame(loop);
 })();
