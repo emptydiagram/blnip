@@ -131,7 +131,7 @@
   };
 
   // -------- initialisation -------- //
-  function placeSource(kind, arr = A) {
+  function placeSource(kind, val, arr = A) {
     let x, y;
     switch (kind) {
       case 'center': x = Math.floor(size / 2); y = Math.floor(size / 2); break;
@@ -141,7 +141,7 @@
       case 'br':     x = size - 1;    y = size - 1;     break;
       default: return;
     }
-    arr[index(x, y)] = 1;
+    arr[index(x, y)] = val;
   }
 
   function buildInitialA(strategy) {
@@ -150,12 +150,12 @@
       case 'random':
         for (let i = 0; i < arr.length; i++) arr[i] = Math.random() * 2 - 1;
         break;
-      case 'center':       placeSource('center', arr); break;
-      case 'top-left':     placeSource('tl', arr);     break;
-      case 'top-right':    placeSource('tr', arr);     break;
-      case 'bot-left':     placeSource('bl', arr);     break;
-      case 'bot-right':    placeSource('br', arr);     break;
-      case 'five-points':  ['center','tl','tr','bl','br'].forEach(k=>placeSource(k,arr)); break;
+      case 'center':       placeSource('center', 1, arr); break;
+      case 'top-left':     placeSource('tl', 1, arr);     break;
+      case 'top-right':    placeSource('tr', 1, arr);     break;
+      case 'bot-left':     placeSource('bl', 1, arr);     break;
+      case 'bot-right':    placeSource('br', 1, arr);     break;
+      case 'five-points':  ['center','tl','tr','bl','br'].forEach(k=>placeSource(k,1,arr)); break;
     }
     return arr;
   }
@@ -227,7 +227,7 @@
   };
 
   document.getElementById('trigger').onclick = () => {
-    placeSource(document.getElementById('source').value);
+    placeSource(document.getElementById('source').value, 1);
     draw();
   };
 
